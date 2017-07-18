@@ -1,0 +1,123 @@
+---
+title: "The Trump Twitter Trove"
+author: "Tristan Prinz"
+date: "7/18/2017"
+---
+
+## Introduction
+
+The 2016 U.S. election was marked (and perhaps marred) by partisan conflict, ideological controversy, and exuberant personalitites. Yet the most striking facet of the election was its conclusion - the American people elected Donald J. Trump to serve as the 45th President of the United States.
+
+The social and culutral mechanisms that guided us to this point in history are worthy of an in-depth anlaysis of their own. However, what distinguished this campaign from every other campaign in U.S. history was the role that media (and in particular social media) played. Never before have candidates been able to influence the American voters psyches in such a frank, profound, and direct way. No other candidate was able to harness the power of this tool quite like Mr. Trump. 
+
+Intentionally or not, Trump's Twitter account served as a stream of consciousness that was oddly candid in its approach, yet nonetheless inflammatory (and at times immature) in its message. It appeared that POTUS-45 tweeted (and continues to tweet) what he wantes and when he wants, without the shackles of a P.R. representative holding his hand along the way. Whether this was a politically wise strategy or not, it became clear that this unpolished approach spoke to a certain archetype of American voter.
+
+In this post, I will use data science techniques to dig into this digital stream of conciousness, and hopefully provide some insights into the trends created and reactions evoked.
+
+## The Data
+
+The first step in forming my analyses was gathering the source material. This required a fair amount of web surfing - fortunately, I managed to locate a rather messy file (of a meager 26,000 rows...) in the desired .csv format, which was uploaded by a fellow github user a couple months ago. The file was disorganized and contained many components that I was not interested in (such as all the tweets that Mr. Trump retweeted). Below is my coding process to gain all of Trump's tweets dating back to May 2009 in a clean and manageable format.
+
+```{r}
+
+# Importing the original csv file
+  
+tweetdata <- read.csv("/Users/tristanprinz/Desktop/TrumpTweets.csv")
+
+# Deleting unwanted columns (i.e. unneccessary variables)
+
+tweetdata.clean.1 <- tweetdata[-c(1:5, 7, 9:11, 13:14, 16:22, 24:192 )]
+
+# Removing rows with NA values and removing arbitrary 'screen_name' column
+
+tweetdata.clean.2 <- na.omit(tweetdata.clean.1)
+
+tweetdata.clean.2$screen_name <- NULL
+
+# Formatting the data into my desired layout
+
+tweetdata.clean.2$created_at <- as.Date(tweetdata.clean.2$created_at, "%a %b %d %H:%M:%S %z %Y")
+
+tweetdata.clean.2$created_at <- format(as.Date(tweetdata.clean.2$created_at), "%m/%d/%Y")
+
+colnames(tweetdata.clean.2) <- c("tweet", "favorites", "date", "retweets")
+
+# Adding an indexing column (for sorting ease)
+
+tweetdata.clean.2$index <- 1:nrow(tweetdata.clean.2)
+
+# Final touches
+
+final.data.1 <- tweetdata.clean.2[,c(5, 1, 2, 3, 4)]
+
+# The line directly below cleverly removes retweets from the dataframe
+
+final.data.2 <- final.data.1[apply(final.data.1[3],1,function(z) !any(z==0)),] 
+
+#This line below removes replacement characters caused by encoding differences
+
+final.data.2$tweet <- gsub("[^[:alnum:]///' ]", "", final.data.2$tweet)
+
+final.data.2$tweet <- tolower(final.data.2$tweet)
+
+# Lets's assign 'final.data.2$tweet' to a variable for ease of access
+
+tt <- final.data.2$tweet 
+```
+
+Here's what the data looks like now
+
+![](/Users/tristanprinz/Desktop/tweets.png)
+
+## The Document Matrix
+
+In order to gain some insight into Trump's word choice, I needed to transform the tweets into raw, unformatted single words. I also needed to collect a comprehensive 'stopwords' collection, because I was only interested in the meaningful words. By utilizing the power of the "tm" package and compiling the tweet data into a "document term matrix", I was able to get the entire dictionary of significant Trump words, which I will call the 'Trumptionary'. Below are the coding steps I took to get there.
+
+```{r}
+# Preparing a corpus for analysis
+
+library(tm)
+
+dfCorpus <- Corpus(VectorSource(final.data.2$tweet)) 
+
+# Formatting the corpus
+
+dfCorpus <- tm_map(dfCorpus, removeNumbers)
+
+# Importing a custom stopwords list 
+
+sw <- read.csv("/Users/tristanprinz/Desktop/stopwords.csv")
+
+stopwords <- c(sw, stopwords("english"))
+
+# dfCorpus <- tm_map(dfCorpus, removeWords, stopwords)
+
+dfCorpus <- tm_map(dfCorpus, stripWhitespace)
+
+# Create a document term matrix, and setting boundaries to further filter the words into the one's we care about
+
+dtmr <- DocumentTermMatrix(dfCorpus, control=list(wordLengths=c(4, 12)))
+
+freqr <- colSums(as.matrix(dtmr))
+
+# With FindFreq function, we can return a list of words that occur in a specified number of Trump's Tweets (in this exampe, all words that occur in at least 250 of the tweets)
+
+findFreqTerms(dtmr,lowfreq=300)
+```
+## Preliminary Observations
+
+Running some basic stats, I found that the most common words were "trump", "america", "great", "make", "donald". Regardless of your political views, it is amusing that two of the five most frequent words Trump tweeted to the public were part of his own name... Creating a wordcloud will gives a great visual insight into Trumps vocabulary
+
+```{r}
+#Create a wordcloud
+
+library(wordcloud)
+
+set.seed(42)
+
+wordcloud(names(freqr),freqr, min.freq=200, colors=brewer.pal(6, "Dark2"))
+```
+
+## In-depth Analysis
+
+With the data properly scraped, imported, cleaned, and the words filtered and arranged in a document term matrix, the final step is to see which words garner the most reaction and acclaim from the public. This part of my post is still a work in progress, so check in over the next few days to read about my findings.
